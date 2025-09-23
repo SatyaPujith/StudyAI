@@ -111,25 +111,25 @@ const UploadCard: React.FC = () => {
 
   return (
     <Card className="border-gray-100 shadow-sm overflow-hidden">
-      <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-50 pb-4">
-        <CardTitle className="flex items-center gap-3 text-black">
-          <div className="p-2 bg-white rounded-xl shadow-sm">
-            <Sparkles className="h-5 w-5 text-gray-700" />
+      <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-50 pb-2">
+        <CardTitle className="flex items-center gap-2 text-black">
+          <div className="p-1 bg-white rounded-lg shadow-sm">
+            <Sparkles className="h-4 w-4 text-gray-700" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold">Create Your Study Plan</h3>
-            <p className="text-sm text-gray-600 font-normal mt-1">
+            <h3 className="text-base font-semibold">Create Your Study Plan</h3>
+            <p className="text-xs text-gray-600 font-normal mt-0.5">
               Upload your syllabus or describe your learning goals
             </p>
           </div>
         </CardTitle>
       </CardHeader>
       
-      <CardContent className="p-6">
+      <CardContent className="p-3">
         {uploadedFiles.length === 0 ? (
           <div
             className={cn(
-              "relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 group cursor-pointer",
+              "relative border-2 border-dashed rounded-lg p-4 text-center transition-all duration-300 group cursor-pointer",
               isDragOver 
                 ? "border-gray-400 bg-gray-50 scale-[1.02]" 
                 : "border-gray-200 hover:border-gray-300 hover:bg-gray-25"
@@ -138,28 +138,40 @@ const UploadCard: React.FC = () => {
             onDragLeave={onDragLeave}
             onDrop={onDrop}
           >
-            <div className="flex flex-col items-center space-y-4">
+            <div className="flex flex-col items-center space-y-2">
               <div className={cn(
-                "p-4 rounded-full transition-all duration-300",
+                "p-2 rounded-full transition-all duration-300",
                 isDragOver ? "bg-gray-100" : "bg-gray-50 group-hover:bg-gray-100"
               )}>
                 <Upload className={cn(
-                  "h-8 w-8 transition-colors duration-300",
+                  "h-5 w-5 transition-colors duration-300",
                   isDragOver ? "text-gray-600" : "text-gray-400 group-hover:text-gray-600"
                 )} />
               </div>
               
               <div className="space-y-2">
-                <h4 className="font-medium text-gray-900">
-                  Drop your files here
-                </h4>
-                <p className="text-sm text-gray-500">
-                  or click to browse from your device
-                </p>
-                <p className="text-xs text-gray-400">
-                  Supports PDF, DOC, DOCX, TXT files
-                </p>
+              <h4 className="font-medium text-gray-900">
+                Drop your files here
+              </h4>
+              <p className="text-sm text-gray-500">
+                or click to browse from your device
+              </p>
+              <p className="text-xs text-gray-400">
+                Supports PDF, DOC, DOCX, TXT files
+              </p>
+              <div className="mt-2 text-center">
+                <label htmlFor="file-upload" className="cursor-pointer text-blue-600 hover:text-blue-800 font-medium text-sm">
+                  Choose files
+                </label>
+                <input
+                  id="file-upload"
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileInput}
+                />
               </div>
+            </div>
             </div>
             
             <Input
@@ -252,13 +264,13 @@ const UploadCard: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-3 mt-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Level *
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Difficulty Level
                 </label>
                 <Select value={level} onValueChange={setLevel}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full h-8 text-xs">
                     <SelectValue placeholder="Select level" />
                   </SelectTrigger>
                   <SelectContent>
@@ -270,61 +282,62 @@ const UploadCard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Duration *
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Duration
                 </label>
                 <Select value={duration} onValueChange={setDuration}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Study duration" />
+                  <SelectTrigger className="w-full h-8 text-xs">
+                    <SelectValue placeholder="Select duration" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="1 day">1 day (Exam Prep)</SelectItem>
                     <SelectItem value="3 days">3 days</SelectItem>
-                    <SelectItem value="1 week">1 week</SelectItem>
-                    <SelectItem value="2 weeks">2 weeks</SelectItem>
-                    <SelectItem value="1 month">1 month</SelectItem>
-                    <SelectItem value="2 months">2 months</SelectItem>
-                    <SelectItem value="3 months">3 months</SelectItem>
-                    <SelectItem value="6 months">6 months</SelectItem>
+                    <SelectItem value="7 days">1 week</SelectItem>
+                    <SelectItem value="14 days">2 weeks</SelectItem>
+                    <SelectItem value="30 days">1 month</SelectItem>
+                    <SelectItem value="60 days">2 months</SelectItem>
+                    <SelectItem value="90 days">3 months</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Learning Style *
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Learning Style
                 </label>
                 <Select value={learningStyle} onValueChange={setLearningStyle}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Your style" />
+                  <SelectTrigger className="w-full h-8 text-xs">
+                    <SelectValue placeholder="Select learning style" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="visual">Visual</SelectItem>
                     <SelectItem value="auditory">Auditory</SelectItem>
-                    <SelectItem value="kinesthetic">Kinesthetic</SelectItem>
                     <SelectItem value="reading">Reading/Writing</SelectItem>
+                    <SelectItem value="kinesthetic">Kinesthetic (Hands-on)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            <Button 
-              onClick={generateStudyPlan}
-              className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium py-2.5"
-              disabled={isGenerating || (!uploadedFiles.length && !manualInput.trim()) || !level || !duration || !learningStyle}
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Generating Study Plan...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Generate AI Study Plan
-                </>
-              )}
-            </Button>
+            <div className="col-span-2 mt-2">
+              <Button
+                onClick={generateStudyPlan}
+                className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium py-1.5 text-sm"
+                disabled={isGenerating || (!uploadedFiles.length && !manualInput.trim()) || !level || !duration || !learningStyle}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Generating Study Plan...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Generate AI Study Plan
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </CardContent>

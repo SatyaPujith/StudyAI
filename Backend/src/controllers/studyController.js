@@ -13,11 +13,28 @@ class StudyController {
       // Generate detailed daily study plan
       logger.info(`Generating detailed study plan for ${subject} (${duration})`);
       
+      // Force using Gemini for content generation
       let detailedPlan = await aiService.generateDetailedStudyPlan(subject, level, duration, learningStyle);
       
       if (!detailedPlan.success) {
-        logger.info('Detailed plan generation failed, trying basic plan...');
-        detailedPlan = await aiService.generateStudyPlan(subject, level, duration, learningStyle);
+        logger.info('Detailed plan generation failed, trying with Gemini directly...');
+        const prompt = `Create a comprehensive study plan for ${subject} at ${level} level.
+Duration: ${duration}
+Learning style: ${learningStyle}
+
+Generate a detailed JSON array with daily content. Each day should include:
+- Day number and descriptive title
+- 3-5 specific learning objectives
+- Detailed overview (200+ words)
+- 5+ key concepts to master
+- 4+ practical examples with explanations
+- 4+ hands-on exercises
+- Relevant resources and materials
+- Estimated study time
+
+Format as valid JSON array starting with [{"day": 1, "title": "...", ...}]`;
+
+        detailedPlan = await aiService.generateWithGemini(prompt, { maxTokens: 4000 });
       }
 
       let dailyContentArray = [];
@@ -523,7 +540,7 @@ Please provide detailed educational content with overview, key points, examples,
 
   async createQuiz(req, res) {
     try {
-      const { topic, difficulty, questionCount = 10 } = req.body;
+      const { topic, difficulty, questionCount = 10, isPublic = true } = req.body;
 
       // Generate AI quiz questions
       const aiResponse = await aiService.generateQuizQuestions(topic, difficulty, questionCount);
@@ -573,12 +590,18 @@ Please provide detailed educational content with overview, key points, examples,
         ];
       }
 
+      // Generate a unique access code for private quizzes
+      const accessCode = !isPublic ? this.generateUniqueCode() : null;
+
       const quiz = new Quiz({
         title: `${topic} - ${difficulty} Quiz`,
         topic,
         difficulty,
         questions,
-        createdBy: req.userId
+        isPublic,
+        accessCode,
+        creator: req.userId,
+        aiGenerated: true
       });
 
       await quiz.save();
@@ -590,6 +613,99 @@ Please provide detailed educational content with overview, key points, examples,
       });
     } catch (error) {
       logger.error('Create quiz error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+  
+  async createManualQuiz(req, res) {
+    try {
+      const { title, topic, difficulty, questions, isPublic = true } = req.body;
+      
+      // Validate required fields
+      if (!title || !topic || !difficulty || !questions || !Array.isArray(questions)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Missing required fields or invalid questions format'
+        });
+      }
+      
+      // Generate a unique access code for private quizzes
+      const accessCode = !isPublic ? generateUniqueCode() : null;
+      
+      const quiz = new Quiz({
+        title,
+        topic,
+        difficulty,
+        questions,
+        isPublic,
+        accessCode,
+        creator: req.userId,
+        aiGenerated: false
+      });
+      
+      await quiz.save();
+      
+      res.status(201).json({
+        success: true,
+        message: 'Manual quiz created successfully',
+        quiz
+      });
+    } catch (error) {
+      logger.error('Create manual quiz error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+  
+  // Generate a unique code for private quizzes
+  generateUniqueCode() {
+    const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar looking characters
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return code;
+  }
+  
+  // Join a quiz by access code
+  async joinQuizByCode(req, res) {
+    try {
+      const { accessCode } = req.body;
+      
+      if (!accessCode) {
+        return res.status(400).json({
+          success: false,
+          message: 'Access code is required'
+        });
+      }
+      
+      const quiz = await Quiz.findOne({ accessCode });
+      
+      if (!quiz) {
+        return res.status(404).json({
+          success: false,
+          message: 'Quiz not found with the provided access code'
+        });
+      }
+      
+      // Add the user to the list of participants if not already included
+      if (!quiz.participants.includes(req.userId)) {
+        quiz.participants.push(req.userId);
+        await quiz.save();
+      }
+      
+      res.json({
+        success: true,
+        message: 'Successfully joined the quiz',
+        quiz
+      });
+    } catch (error) {
+      logger.error('Join quiz error:', error);
       res.status(500).json({
         success: false,
         message: 'Internal server error'

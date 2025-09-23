@@ -46,6 +46,8 @@ export interface Quiz {
   difficulty: 'easy' | 'medium' | 'hard';
   questions: QuizQuestion[];
   createdAt: string;
+  accessCode?: string;
+  isPublic?: boolean;
 }
 
 export interface QuizQuestion {
@@ -137,12 +139,39 @@ class DataService {
     topic: string;
     difficulty: string;
     questionCount?: number;
+    isPublic?: boolean;
   }): Promise<Quiz | null> {
     try {
       const response = await studyAPI.createQuiz(data);
       return response.data.quiz;
     } catch (error) {
       console.error('Error creating quiz:', error);
+      return null;
+    }
+  }
+  
+  async createManualQuiz(data: {
+    title: string;
+    topic: string;
+    difficulty: string;
+    questions: QuizQuestion[];
+    isPublic?: boolean;
+  }): Promise<Quiz | null> {
+    try {
+      const response = await studyAPI.createManualQuiz(data);
+      return response.data.quiz;
+    } catch (error) {
+      console.error('Error creating manual quiz:', error);
+      return null;
+    }
+  }
+  
+  async joinQuizByCode(accessCode: string): Promise<any> {
+    try {
+      const response = await studyAPI.joinQuizByCode({ accessCode });
+      return response.data;
+    } catch (error) {
+      console.error('Error joining quiz:', error);
       return null;
     }
   }

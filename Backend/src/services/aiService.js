@@ -95,6 +95,7 @@ class AIService {
         
         const apiKey = this.geminiConfig?.apiKey;
         if (!apiKey || apiKey === 'placeholder-key' || apiKey === 'undefined' || !apiKey.startsWith('AIza')) {
+            logger.error('Gemini API key not configured or invalid:', apiKey);
             return {
                 success: false,
                 error: 'Gemini API key not configured or invalid'
@@ -102,7 +103,11 @@ class AIService {
         }
 
         try {
-            const url = `${this.geminiConfig.baseURL}/models/${this.geminiConfig.model}:generateContent?key=${this.geminiConfig.apiKey}`;
+            // Use a more reliable model
+            const model = 'gemini-1.5-flash';
+            const url = `${this.geminiConfig.baseURL}/models/${model}:generateContent?key=${this.geminiConfig.apiKey}`;
+            
+            logger.info(`Calling Gemini API with model: ${model}`);
             
             const response = await axios.post(
                 url,
@@ -119,7 +124,25 @@ class AIService {
                         maxOutputTokens: options.maxTokens || 2000,
                         topP: options.topP || 0.8,
                         topK: options.topK || 40
-                    }
+                    },
+                    safetySettings: [
+                        {
+                            category: "HARM_CATEGORY_HARASSMENT",
+                            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                        },
+                        {
+                            category: "HARM_CATEGORY_HATE_SPEECH",
+                            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                        },
+                        {
+                            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                        },
+                        {
+                            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+                            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                        }
+                    ]
                 },
                 {
                     headers: {
@@ -129,12 +152,14 @@ class AIService {
             );
 
             if (response.data.candidates && response.data.candidates.length > 0) {
+                logger.info('Gemini API response successful');
                 return {
                     success: true,
                     content: response.data.candidates[0].content.parts[0].text,
                     usage: response.data.usageMetadata
                 };
             } else {
+                logger.error('No candidates returned from Gemini API:', response.data);
                 throw new Error('No candidates returned from Gemini API');
             }
         } catch (error) {

@@ -54,7 +54,9 @@ export const studyAPI = {
   
   // Quizzes
   createQuiz: (data: any) => api.post('/study/quizzes', data),
+  createManualQuiz: (data: any) => api.post('/study/quizzes/manual', data),
   getQuizzes: (params?: any) => api.get('/study/quizzes', { params }),
+  joinQuizByCode: (data: any) => api.post('/study/quizzes/join', data),
   submitQuizAttempt: (data: any) => api.post('/study/quiz-attempts', data),
   getQuizAttempts: () => api.get('/study/quiz-attempts'),
   

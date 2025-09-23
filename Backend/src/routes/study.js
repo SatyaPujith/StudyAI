@@ -17,6 +17,7 @@ router.get('/plans/:planId/topics/:topicId/content', studyController.getStudyCon
 // Quizzes
 router.post('/quizzes', studyController.createQuiz);
 router.get('/quizzes', studyController.getQuizzes);
+router.post('/quizzes/join', studyController.joinQuizByCode);
 router.post('/quiz-attempts', studyController.submitQuizAttempt);
 router.get('/quiz-attempts', studyController.getQuizAttempts);
 

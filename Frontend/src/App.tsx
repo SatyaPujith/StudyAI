@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AuthPage } from './components/AuthPage';
 import Navigation from './components/Navigation';
@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import RightPanel from './components/RightPanel';
 import QuizModal from './components/QuizModal';
+import DebugPanel from './components/DebugPanel';
 import { Toaster } from 'sonner';
 
 const AppContent = () => {
@@ -64,9 +65,29 @@ const AppContent = () => {
 };
 
 function App() {
+  const [showDebug, setShowDebug] = useState(false);
+
+  // Toggle debug panel with Ctrl+Shift+D
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        setShowDebug(prev => !prev);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
-    <AuthProvider children={undefined}>
+    <AuthProvider>
       <AppContent />
+      {showDebug && <div className="fixed bottom-0 right-0 w-full max-w-lg z-50">
+        <div className="p-4">
+          <DebugPanel />
+        </div>
+      </div>}
       <Toaster richColors position="top-right" />
     </AuthProvider>
   );

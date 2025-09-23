@@ -4,12 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { PlayCircle, Brain, Trophy, Clock, ChevronRight, Plus, Search } from 'lucide-react';
+import { Brain, Trophy, Clock, ChevronRight, Plus, Search } from 'lucide-react';
 import dataService from '../services/dataService';
 import { toast } from 'sonner';
+import QuizCreationDialog from './QuizCreationDialog';
+import JoinQuizDialog from './JoinQuizDialog';
+import ManualQuizBuilder from './ManualQuizBuilder';
 
 interface QuizzesViewProps {
-  onStartQuiz: () => void;
+  onStartQuiz: (quizId: string) => void;
 }
 
 interface Quiz {
@@ -19,6 +22,8 @@ interface Quiz {
   difficulty: 'easy' | 'medium' | 'hard';
   questions: any[];
   createdAt: string;
+  isPublic: boolean;
+  accessCode?: string;
 }
 
 interface QuizAttempt {
@@ -36,6 +41,10 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
   const [newQuizTopic, setNewQuizTopic] = useState('');
   const [newQuizDifficulty, setNewQuizDifficulty] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showCreationDialog, setShowCreationDialog] = useState(false);
+  const [showJoinDialog, setShowJoinDialog] = useState(false);
+  const [showManualBuilder, setShowManualBuilder] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
 
   useEffect(() => {
     loadQuizzes();
@@ -45,7 +54,7 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
   const loadQuizzes = async () => {
     try {
       const data = await dataService.getQuizzes();
-      setQuizzes(data);
+      setQuizzes(data as Quiz[]);
     } catch (error) {
       console.error('Error loading quizzes:', error);
     } finally {
@@ -62,7 +71,7 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
     }
   };
 
-  const createQuiz = async (useAI: boolean = true) => {
+  const createQuiz = async (useAI: boolean = true, isPublic: boolean = true) => {
     if (!newQuizTopic.trim() || !newQuizDifficulty) {
       toast.error('Please provide topic and difficulty');
       return;
@@ -70,28 +79,37 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
 
     setCreating(true);
     try {
-      let quiz;
       if (useAI) {
         // AI-generated quiz
-        quiz = await dataService.createQuiz({
+        const quiz = await dataService.createQuiz({
           topic: newQuizTopic,
           difficulty: newQuizDifficulty,
-          questionCount: 10
+          questionCount: 10,
+          isPublic
         });
+        
+        if (quiz) {
+          toast.success('Quiz created successfully!');
+          
+          // Show access code for private quizzes
+          if (!isPublic && quiz.accessCode) {
+            toast.success(
+              `Your private quiz access code: ${quiz.accessCode}`,
+              { duration: 10000 }
+            );
+          }
+          
+          setNewQuizTopic('');
+          setNewQuizDifficulty('');
+          setShowCreationDialog(false);
+          loadQuizzes();
+        } else {
+          toast.error('Failed to create quiz');
+        }
       } else {
-        // Manual quiz creation - redirect to quiz builder
-        toast.info('Redirecting to manual quiz builder...');
-        // TODO: Implement manual quiz builder
-        return;
-      }
-
-      if (quiz) {
-        toast.success('Quiz created successfully!');
-        setNewQuizTopic('');
-        setNewQuizDifficulty('');
-        loadQuizzes();
-      } else {
-        toast.error('Failed to create quiz');
+        // Manual quiz creation - show manual quiz builder
+        setShowCreationDialog(false);
+        setShowManualBuilder(true);
       }
     } catch (error) {
       console.error('Error creating quiz:', error);
@@ -107,14 +125,29 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
       return;
     }
 
-    // Show modal with AI vs Manual options
-    const useAI = window.confirm(
-      `How would you like to create the quiz "${newQuizTopic}"?\n\n` +
-      'Click OK for AI Generation (recommended)\n' +
-      'Click Cancel for Manual Creation'
-    );
-
-    createQuiz(useAI);
+    setShowCreationDialog(true);
+  };
+  
+  const joinQuizByCode = async () => {
+    if (!joinCode.trim()) {
+      toast.error('Please enter an access code');
+      return;
+    }
+    
+    try {
+      const result = await dataService.joinQuizByCode(joinCode);
+      if (result && result.success) {
+        toast.success('Successfully joined quiz!');
+        setJoinCode('');
+        setShowJoinDialog(false);
+        loadQuizzes();
+      } else {
+        toast.error('Invalid access code or quiz not found');
+      }
+    } catch (error) {
+      console.error('Error joining quiz:', error);
+      toast.error('Failed to join quiz');
+    }
   };
 
   const getQuizScore = (quizId: string) => {
@@ -191,17 +224,59 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
                 <SelectItem value="hard">Hard</SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              onClick={showQuizCreationOptions}
-              disabled={creating || !newQuizTopic.trim() || !newQuizDifficulty}
-              className="bg-gray-900 hover:bg-gray-800"
-            >
-              {creating ? 'Creating...' : 'Create Quiz'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={showQuizCreationOptions}
+                disabled={creating || !newQuizTopic.trim() || !newQuizDifficulty}
+                className="bg-gray-900 hover:bg-gray-800 flex-1"
+              >
+                {creating ? 'Creating...' : 'Create Quiz'}
+              </Button>
+              <Button
+                onClick={() => setShowJoinDialog(true)}
+                variant="outline"
+                className="border-gray-200 hover:bg-gray-50"
+              >
+                Join
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
-
+      
+      {showCreationDialog && (
+        <QuizCreationDialog
+          open={showCreationDialog}
+          onClose={() => setShowCreationDialog(false)}
+          topic={newQuizTopic}
+          difficulty={newQuizDifficulty}
+          onCreateQuiz={createQuiz}
+          creating={creating}
+        />
+      )}
+      
+      {showJoinDialog && (
+        <JoinQuizDialog
+          open={showJoinDialog}
+          onClose={() => setShowJoinDialog(false)}
+          onJoin={(code) => {
+            setJoinCode(code);
+            return joinQuizByCode();
+          }}
+          joining={false}
+        />
+      )}
+      
+      {showManualBuilder && (
+        <ManualQuizBuilder
+          topic={newQuizTopic}
+          difficulty={newQuizDifficulty}
+          onClose={() => setShowManualBuilder(false)}
+          onSave={handleManualQuizSave} onBack={function (): void {
+            throw new Error('Function not implemented.');
+          } }        />
+      )}
+      
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -265,7 +340,7 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
                       </div>
                     </div>
                     <Button
-                      onClick={() => onStartQuiz()}
+                      onClick={() => onStartQuiz(quiz._id)}
                       className="bg-gray-900 hover:bg-gray-800 text-white"
                     >
                       {hasAttempted ? 'Retake' : 'Start'}
@@ -280,6 +355,35 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
       </div>
     </div>
   );
+  
+  // Add the handleManualQuizSave function inside the component
+  async function handleManualQuizSave(quizData: any) {
+    try {
+      const quiz = await dataService.createManualQuiz(quizData);
+      
+      if (quiz) {
+        toast.success('Quiz created successfully!');
+        
+        // Show access code for private quizzes
+        if (!quizData.isPublic && quiz.accessCode) {
+          toast.success(
+            `Your private quiz access code: ${quiz.accessCode}`,
+            { duration: 10000 }
+          );
+        }
+        
+        setNewQuizTopic('');
+        setNewQuizDifficulty('');
+        setShowManualBuilder(false);
+        loadQuizzes();
+      } else {
+        toast.error('Failed to create quiz');
+      }
+    } catch (error) {
+      console.error('Error creating manual quiz:', error);
+      toast.error('Failed to create quiz');
+    }
+  }
 };
 
 export default QuizzesView;

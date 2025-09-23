@@ -13,7 +13,6 @@ const quizSchema = new mongoose.Schema({
   },
   subject: {
     type: String,
-    required: [true, 'Subject is required'],
     trim: true
   },
   topic: {
@@ -26,72 +25,62 @@ const quizSchema = new mongoose.Schema({
     enum: ['easy', 'medium', 'hard'],
     required: true
   },
+  type: {
+    type: String,
+    enum: ['multiple_choice', 'true_false', 'mixed'],
+    default: 'multiple_choice',
+    required: true
+  },
+  isPublic: {
+    type: Boolean,
+    default: true
+  },
+  accessCode: {
+    type: String,
+    trim: true
+  },
+  creator: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  aiGenerated: {
+    type: Boolean,
+    default: false
+  },
   questions: [{
     question: {
       type: String,
       required: [true, 'Question text is required'],
       trim: true
     },
-    type: {
-      type: String,
-      enum: ['multiple_choice', 'true_false', 'short_answer', 'essay'],
-      required: true
-    },
-    options: [{
-      text: String,
-      isCorrect: Boolean
-    }],
-    correctAnswer: String, // For short answer and essay questions
+    options: [String],
+    correct: Number,
     explanation: String,
     points: {
       type: Number,
       default: 1,
       min: [1, 'Points must be at least 1']
     },
-    timeLimit: Number, // in seconds
-    tags: [String]
+    timeLimit: Number // in seconds
   }],
-  settings: {
-    timeLimit: Number, // in minutes, null for unlimited
-    shuffleQuestions: { type: Boolean, default: false },
-    shuffleOptions: { type: Boolean, default: false },
-    showCorrectAnswers: { type: Boolean, default: true },
-    allowRetakes: { type: Boolean, default: true },
-    maxAttempts: { type: Number, default: null }, // null for unlimited
-    passingScore: { type: Number, default: 70 } // percentage
-  },
-  creator: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+  type: {
+    type: String,
+    enum: ['multiple_choice', 'true_false', 'short_answer', 'essay'],
     required: true
   },
-  aiGenerated: {
-    type: Boolean,
-    default: false
-  },
-  aiPrompt: String,
-  studyPlan: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'StudyPlan'
-  },
-  isPublic: {
-    type: Boolean,
-    default: false
-  },
-  tags: [{
-    type: String,
-    trim: true
+  options: [{
+    text: String,
+    isCorrect: Boolean
   }],
-  stats: {
-    totalAttempts: { type: Number, default: 0 },
-    averageScore: { type: Number, default: 0 },
-    completionRate: { type: Number, default: 0 }
+  correctAnswer: String, // For short answer and essay questions
+  explanation: String,
+  points: {
+    type: Number,
+    default: 1,
+    min: [1, 'Points must be at least 1']
   },
-  status: {
-    type: String,
-    enum: ['draft', 'published', 'archived'],
-    default: 'draft'
-  }
+  timeLimit: Number, // in seconds
+  tags: [String]
 }, {
   timestamps: true
 });

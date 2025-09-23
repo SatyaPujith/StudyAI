@@ -74,18 +74,25 @@ class AuthController {
   async login(req, res) {
     try {
       const { email, password } = req.body;
+      
+      console.log(`Login attempt for email: ${email}`);
 
       // Find user
       const user = await User.findOne({ email });
       if (!user) {
+        console.log(`User not found for email: ${email}`);
         return res.status(401).json({
           success: false,
           message: 'Invalid credentials'
         });
       }
 
+      console.log(`User found: ${user.name}, comparing passwords...`);
+      
       // Check password
       const isValidPassword = await bcrypt.compare(password, user.password);
+      console.log(`Password match result: ${isValidPassword}`);
+      
       if (!isValidPassword) {
         return res.status(401).json({
           success: false,
@@ -100,10 +107,12 @@ class AuthController {
       // Generate JWT token
       const token = jwt.sign(
         { userId: user._id },
-        process.env.JWT_SECRET,
+        process.env.JWT_SECRET || 'fallbacksecretkey',
         { expiresIn: '7d' }
       );
 
+      console.log(`Login successful for user: ${user.name}`);
+      
       res.json({
         success: true,
         message: 'Login successful',
