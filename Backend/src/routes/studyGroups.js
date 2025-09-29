@@ -17,4 +17,15 @@ router.delete('/:id', studyGroupController.deleteStudyGroup);
 router.post('/:id/join', studyGroupController.joinStudyGroup);
 router.post('/:id/leave', studyGroupController.leaveStudyGroup);
 
+// Session management
+router.post('/:id/sessions', studyGroupController.scheduleSession);
+router.post('/:id/sessions/:sessionId/join', studyGroupController.joinSession);
+router.post('/:id/sessions/:sessionId/end', studyGroupController.endSession);
+router.get('/:id/sessions/:sessionId', studyGroupController.getSession);
+router.post('/sessions/join-by-code', studyGroupController.joinSessionByCode);
+
+// Chat functionality
+router.post('/:id/chat', studyGroupController.sendChatMessage);
+router.get('/:id/chat', studyGroupController.getChatMessages);
+
 export default router;

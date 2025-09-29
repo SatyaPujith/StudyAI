@@ -63,23 +63,6 @@ const quizSchema = new mongoose.Schema({
     },
     timeLimit: Number // in seconds
   }],
-  type: {
-    type: String,
-    enum: ['multiple_choice', 'true_false', 'short_answer', 'essay'],
-    required: true
-  },
-  options: [{
-    text: String,
-    isCorrect: Boolean
-  }],
-  correctAnswer: String, // For short answer and essay questions
-  explanation: String,
-  points: {
-    type: Number,
-    default: 1,
-    min: [1, 'Points must be at least 1']
-  },
-  timeLimit: Number, // in seconds
   tags: [String]
 }, {
   timestamps: true

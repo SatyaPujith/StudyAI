@@ -34,7 +34,7 @@ const upload = multer({
     } else {
       cb(new Error('Invalid file type. Only PDF, DOC, DOCX, and TXT files are allowed.'));
     }
-  }
+  }  
 });
 
 // Helper function to extract text from files

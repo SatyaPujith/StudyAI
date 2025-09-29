@@ -271,10 +271,11 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
         <ManualQuizBuilder
           topic={newQuizTopic}
           difficulty={newQuizDifficulty}
+          isPublic={true}
+          onBack={() => setShowManualBuilder(false)}
           onClose={() => setShowManualBuilder(false)}
-          onSave={handleManualQuizSave} onBack={function (): void {
-            throw new Error('Function not implemented.');
-          } }        />
+          onSave={handleManualQuizSave}
+        />
       )}
       
       {/* Search */}
@@ -359,6 +360,7 @@ const QuizzesView: React.FC<QuizzesViewProps> = ({ onStartQuiz }) => {
   // Add the handleManualQuizSave function inside the component
   async function handleManualQuizSave(quizData: any) {
     try {
+      console.log('Creating manual quiz with data:', quizData);
       const quiz = await dataService.createManualQuiz(quizData);
       
       if (quiz) {

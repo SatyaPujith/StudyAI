@@ -6,7 +6,7 @@ import logger from '../utils/logger.js';
 class AuthController {
   async register(req, res) {
     try {
-      const { username, email, password, firstName, lastName } = req.body;
+      let { username, email, password, firstName, lastName } = req.body;
 
       // Validate required fields
       if (!username || !email || !password || !firstName || !lastName) {
@@ -15,6 +15,9 @@ class AuthController {
           message: 'All fields are required'
         });
       }
+
+      // Normalize email
+      email = email.toLowerCase();
 
       // Check if user already exists
       const existingUser = await User.findOne({
@@ -28,15 +31,12 @@ class AuthController {
         });
       }
 
-      // Hash password
-      const saltRounds = 12;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-
       // Create user
       const user = new User({
         username,
         email,
-        password: hashedPassword,
+        // Let the User model pre-save hook hash the password
+        password,
         firstName,
         lastName
       });
@@ -46,7 +46,7 @@ class AuthController {
       // Generate JWT token
       const token = jwt.sign(
         { userId: user._id },
-        process.env.JWT_SECRET,
+        process.env.JWT_SECRET || 'fallbacksecretkey',
         { expiresIn: '7d' }
       );
 
@@ -63,7 +63,7 @@ class AuthController {
         }
       });
     } catch (error) {
-      logger.error('Registration error:', error);
+      logger.error('Registration error:', error.message, error.stack);
       res.status(500).json({
         success: false,
         message: 'Internal server error'
@@ -73,8 +73,11 @@ class AuthController {
 
   async login(req, res) {
     try {
-      const { email, password } = req.body;
-      
+      let { email, password } = req.body;
+
+      // Normalize email
+      email = email.toLowerCase();
+
       console.log(`Login attempt for email: ${email}`);
 
       // Find user
@@ -87,12 +90,12 @@ class AuthController {
         });
       }
 
-      console.log(`User found: ${user.name}, comparing passwords...`);
-      
+      console.log(`User found: ${user.username}, comparing passwords...`);
+
       // Check password
       const isValidPassword = await bcrypt.compare(password, user.password);
       console.log(`Password match result: ${isValidPassword}`);
-      
+
       if (!isValidPassword) {
         return res.status(401).json({
           success: false,
@@ -111,8 +114,8 @@ class AuthController {
         { expiresIn: '7d' }
       );
 
-      console.log(`Login successful for user: ${user.name}`);
-      
+      console.log(`Login successful for user: ${user.username}`);
+
       res.json({
         success: true,
         message: 'Login successful',
@@ -126,7 +129,7 @@ class AuthController {
         }
       });
     } catch (error) {
-      logger.error('Login error:', error);
+      logger.error('Login error:', error.message, error.stack);
       res.status(500).json({
         success: false,
         message: 'Internal server error'
@@ -142,7 +145,7 @@ class AuthController {
         user
       });
     } catch (error) {
-      logger.error('Get profile error:', error);
+      logger.error('Get profile error:', error.message, error.stack);
       res.status(500).json({
         success: false,
         message: 'Internal server error'
@@ -153,10 +156,16 @@ class AuthController {
   async updateProfile(req, res) {
     try {
       const { firstName, lastName, preferences } = req.body;
-      
+
+      // Whitelist fields to update
+      const updateData = {};
+      if (firstName) updateData.firstName = firstName;
+      if (lastName) updateData.lastName = lastName;
+      if (preferences) updateData.preferences = preferences;
+
       const user = await User.findByIdAndUpdate(
         req.userId,
-        { firstName, lastName, preferences },
+        updateData,
         { new: true }
       ).select('-password');
 
@@ -166,7 +175,7 @@ class AuthController {
         user
       });
     } catch (error) {
-      logger.error('Update profile error:', error);
+      logger.error('Update profile error:', error.message, error.stack);
       res.status(500).json({
         success: false,
         message: 'Internal server error'
@@ -176,3 +185,4 @@ class AuthController {
 }
 
 export default new AuthController();
+

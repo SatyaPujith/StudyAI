@@ -74,7 +74,85 @@ const studyGroupSchema = new mongoose.Schema({
       type: String,
       default: 'UTC'
     },
-    duration: Number // in minutes
+    duration: Number, // in minutes
+    nextSession: Date,
+    recurringPattern: {
+      type: String,
+      enum: ['none', 'daily', 'weekly', 'monthly'],
+      default: 'weekly'
+    }
+  },
+  sessions: [{
+    title: String,
+    description: String,
+    scheduledAt: Date,
+    duration: Number, // in minutes
+    meetingLink: String,
+    joinCode: String,
+    status: {
+      type: String,
+      enum: ['scheduled', 'live', 'completed', 'cancelled'],
+      default: 'scheduled'
+    },
+    liveStartedAt: Date,
+    endedAt: Date,
+    attendees: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      joinedAt: Date,
+      leftAt: Date,
+      duration: Number // in minutes
+    }],
+    recording: {
+      available: { type: Boolean, default: false },
+      url: String,
+      duration: Number
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
+  }],
+  chat: {
+    enabled: { type: Boolean, default: true },
+    messages: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+      },
+      content: {
+        type: String,
+        required: true,
+        maxlength: [1000, 'Message cannot exceed 1000 characters']
+      },
+      type: {
+        type: String,
+        enum: ['text', 'file', 'image', 'system'],
+        default: 'text'
+      },
+      attachments: [{
+        filename: String,
+        url: String,
+        size: Number,
+        mimeType: String
+      }],
+      edited: { type: Boolean, default: false },
+      editedAt: Date,
+      reactions: [{
+        emoji: String,
+        users: [{
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User'
+        }]
+      }],
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }]
   },
   resources: [{
     title: {
@@ -221,6 +299,117 @@ studyGroupSchema.methods.getMemberRole = function(userId) {
     member.user.toString() === userId.toString()
   );
   return member ? member.role : null;
+};
+
+// Schedule a new session
+studyGroupSchema.methods.scheduleSession = function(sessionData, createdBy) {
+  const session = {
+    title: sessionData.title,
+    description: sessionData.description,
+    scheduledAt: new Date(sessionData.scheduledAt),
+    duration: sessionData.duration || 60,
+    meetingLink: this.generateMeetingLink(),
+    joinCode: this.generateJoinCode(),
+    createdBy: createdBy,
+    attendees: []
+  };
+  
+  this.sessions.push(session);
+  
+  // Update next session if this is the earliest upcoming session
+  const now = new Date();
+  const upcomingSessions = this.sessions
+    .filter(s => s.scheduledAt > now && s.status === 'scheduled')
+    .sort((a, b) => a.scheduledAt - b.scheduledAt);
+  
+  if (upcomingSessions.length > 0) {
+    this.schedule.nextSession = upcomingSessions[0].scheduledAt;
+  }
+  
+  return this.save();
+};
+
+// Generate meeting link (placeholder - would integrate with actual video service)
+studyGroupSchema.methods.generateMeetingLink = function() {
+  const roomId = Math.random().toString(36).substring(2, 15);
+  return `https://meet.studyai.com/room/${roomId}`;
+};
+
+// Generate a short join code
+studyGroupSchema.methods.generateJoinCode = function() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return code;
+};
+
+// Add chat message
+studyGroupSchema.methods.addChatMessage = function(userId, content, type = 'text') {
+  const message = {
+    user: userId,
+    content,
+    type,
+    createdAt: new Date()
+  };
+  
+  this.chat.messages.push(message);
+  
+  // Keep only last 1000 messages
+  if (this.chat.messages.length > 1000) {
+    this.chat.messages = this.chat.messages.slice(-1000);
+  }
+  
+  return this.save();
+};
+
+// Join session
+studyGroupSchema.methods.joinSession = function(sessionId, userId) {
+  const session = this.sessions.id(sessionId);
+  if (!session) {
+    throw new Error('Session not found');
+  }
+  
+  const existingAttendee = session.attendees.find(a => 
+    a.user.toString() === userId.toString()
+  );
+  
+  if (!existingAttendee) {
+    session.attendees.push({
+      user: userId,
+      joinedAt: new Date()
+    });
+  }
+  
+  // Update session status to live if it's the scheduled time
+  const now = new Date();
+  if (session.scheduledAt <= now && session.status === 'scheduled') {
+    session.status = 'live';
+    session.liveStartedAt = session.liveStartedAt || now;
+  }
+  
+  return this.save();
+};
+
+// End session (creator only)
+studyGroupSchema.methods.endSession = function(sessionId, endedBy) {
+  const session = this.sessions.id(sessionId);
+  if (!session) {
+    throw new Error('Session not found');
+  }
+  // Only group creator can end a session
+  if (this.creator.toString() !== endedBy.toString()) {
+    throw new Error('Only the group creator can end sessions');
+  }
+  session.status = 'completed';
+  session.endedAt = new Date();
+  // Optionally mark attendees leftAt if not set
+  session.attendees = (session.attendees || []).map(a => ({
+    ...a.toObject ? a.toObject() : a,
+    leftAt: a.leftAt || new Date()
+  }));
+  return this.save();
 };
 
 export default mongoose.model('StudyGroup', studyGroupSchema);

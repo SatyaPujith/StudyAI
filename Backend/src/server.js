@@ -42,11 +42,20 @@ app.use(limiter);
 
 // CORS configuration
 app.use(cors({
-  origin: "*", // Allow all origins for testing
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    process.env.FRONTEND_URL
+  ].filter(Boolean),
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  optionsSuccessStatus: 200
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -76,6 +85,23 @@ io.on('connection', (socket) => {
   socket.on('join-study-group', (groupId) => {
     socket.join(`study-group-${groupId}`);
     logger.info(`User ${socket.id} joined study group ${groupId}`);
+  });
+  
+  // Session rooms for real-time participation
+  socket.on('join-session-room', (sessionId) => {
+    socket.join(`study-session-${sessionId}`);
+    logger.info(`User ${socket.id} joined session room ${sessionId}`);
+    socket.to(`study-session-${sessionId}`).emit('presence-joined', { socketId: socket.id });
+  });
+  
+  socket.on('leave-session-room', (sessionId) => {
+    socket.leave(`study-session-${sessionId}`);
+    logger.info(`User ${socket.id} left session room ${sessionId}`);
+    socket.to(`study-session-${sessionId}`).emit('presence-left', { socketId: socket.id });
+  });
+  
+  socket.on('session-message', ({ sessionId, message }) => {
+    io.to(`study-session-${sessionId}`).emit('session-message', message);
   });
   
   socket.on('disconnect', () => {

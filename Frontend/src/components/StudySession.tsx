@@ -78,7 +78,7 @@ const StudySession: React.FC<StudySessionProps> = ({
 
   const startStudySession = async () => {
     try {
-      const response = await fetch(`/api/study/progress/start`, {
+      const response = await fetch('/api/study/progress/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -103,7 +103,7 @@ const StudySession: React.FC<StudySessionProps> = ({
     if (!sessionId) return;
 
     try {
-      await fetch(`/api/study/progress/end`, {
+      await fetch('/api/study/progress/end', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,7 +124,7 @@ const StudySession: React.FC<StudySessionProps> = ({
   const loadStudyContent = async () => {
     try {
       // Load real AI-generated content from backend
-      const response = await fetch(`http://localhost:5000/api/study/plans/${studyPlanId}/topics/${topicId}/content`, {
+      const response = await fetch(`/api/study/plans/${studyPlanId}/topics/${topicId}/content`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -237,7 +237,7 @@ In this session, you'll learn about the core principles, understand key terminol
     // Track section completion
     if (sessionId) {
       try {
-        await fetch(`/api/study/progress/section`, {
+        await fetch('/api/study/progress/section', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -10,146 +10,19 @@ class StudyController {
     try {
       const { subject, level, duration, learningStyle, goals } = req.body;
 
-      // Generate detailed daily study plan
-      logger.info(`Generating detailed study plan for ${subject} (${duration})`);
-      
-      // Force using Gemini for content generation
-      let detailedPlan = await aiService.generateDetailedStudyPlan(subject, level, duration, learningStyle);
-      
-      if (!detailedPlan.success) {
-        logger.info('Detailed plan generation failed, trying with Gemini directly...');
-        const prompt = `Create a comprehensive study plan for ${subject} at ${level} level.
-Duration: ${duration}
-Learning style: ${learningStyle}
-
-Generate a detailed JSON array with daily content. Each day should include:
-- Day number and descriptive title
-- 3-5 specific learning objectives
-- Detailed overview (200+ words)
-- 5+ key concepts to master
-- 4+ practical examples with explanations
-- 4+ hands-on exercises
-- Relevant resources and materials
-- Estimated study time
-
-Format as valid JSON array starting with [{"day": 1, "title": "...", ...}]`;
-
-        detailedPlan = await aiService.generateWithGemini(prompt, { maxTokens: 4000 });
-      }
-
-      let dailyContentArray = [];
-      let basicTopics = [];
-
-      if (detailedPlan.success) {
-        try {
-          // Try to parse as JSON for detailed daily content
-          const parsedContent = JSON.parse(detailedPlan.content);
-          if (Array.isArray(parsedContent)) {
-            dailyContentArray = parsedContent;
-            logger.info(`Generated ${dailyContentArray.length} days of detailed content`);
-          }
-        } catch (parseError) {
-          logger.info('Could not parse detailed plan as JSON, creating basic structure');
-          // Create basic daily structure from text content
-          const durationInDays = aiService.parseDuration(duration);
-          dailyContentArray = await this.createBasicDailyStructure(subject, level, durationInDays, detailedPlan.content);
-        }
-      }
-
-      // If no daily content generated, create fallback structure
-      if (dailyContentArray.length === 0) {
-        logger.info('Creating fallback daily structure');
-        const durationInDays = aiService.parseDuration(duration);
-        dailyContentArray = await this.createFallbackDailyContent(subject, level, durationInDays);
-      }
+      logger.info(`Creating study plan for ${subject} (${duration})`);
 
       // Calculate dates
       const startDate = new Date();
-      const totalDurationInDays = aiService.parseDuration(duration);
-      const endDate = new Date(startDate.getTime() + (totalDurationInDays * 24 * 60 * 60 * 1000));
-
-      // Create daily content with dates
-      const dailyContent = dailyContentArray.map((dayContent, index) => {
-        const dayDate = new Date(startDate.getTime() + (index * 24 * 60 * 60 * 1000));
-        return {
-          day: index + 1,
-          date: dayDate,
-          title: dayContent.title || `Day ${index + 1}: ${subject} Study`,
-          objectives: dayContent.objectives || [`Learn key concepts for day ${index + 1}`],
-          content: {
-            overview: dayContent.overview || `Today you'll learn important concepts about ${subject}. This session will build upon previous knowledge and introduce new topics.`,
-            keyPoints: dayContent.keyPoints || [
-              `Key concept 1 for ${subject}`,
-              `Important principle related to ${subject}`,
-              `Practical application of ${subject}`,
-              `Advanced topic in ${subject}`
-            ],
-            examples: dayContent.examples || [
-              `Example 1: Basic demonstration of ${subject} concepts`,
-              `Example 2: Real-world application of ${subject}`,
-              `Example 3: Problem-solving scenario in ${subject}`
-            ],
-            exercises: dayContent.exercises || [
-              `Practice exercise 1: Apply basic ${subject} concepts`,
-              `Practice exercise 2: Solve problems using ${subject}`,
-              `Practice exercise 3: Create your own ${subject} example`
-            ]
-          },
-          resources: dayContent.resources || [
-            {
-              type: 'article',
-              title: `Essential ${subject} Reading`,
-              description: `Comprehensive guide to ${subject} concepts`
-            },
-            {
-              type: 'practice',
-              title: `${subject} Practice Exercises`,
-              description: `Hands-on exercises to reinforce learning`
-            }
-          ],
-          activities: dayContent.activities || [
-            {
-              type: 'reading',
-              description: `Read about ${subject} fundamentals`,
-              duration: 45
-            },
-            {
-              type: 'practice',
-              description: `Complete ${subject} exercises`,
-              duration: 30
-            }
-          ],
-          assessment: dayContent.assessment || [
-            {
-              question: `What is the main concept of ${subject}?`,
-              options: ['Option A', 'Option B', 'Option C', 'Option D'],
-              correct: 0,
-              explanation: `This is the correct answer because...`
-            }
-          ],
-          homework: dayContent.homework || `Review today's ${subject} concepts and prepare for tomorrow's lesson`,
-          totalTime: dayContent.totalTime || 90
-        };
-      });
-
-      // Create basic topics from daily content
-      basicTopics = dailyContent.map((day, index) => ({
-        title: day.title,
-        description: day.content.overview.substring(0, 200) + '...',
-        order: index + 1,
-        estimatedTime: day.totalTime,
-        difficulty: index < dailyContent.length / 3 ? 'easy' : index < (dailyContent.length * 2) / 3 ? 'medium' : 'hard',
-        resources: day.resources
-      }));
+      const durationInDays = this.parseDuration(duration);
+      const endDate = new Date(startDate.getTime() + (durationInDays * 24 * 60 * 60 * 1000));
 
       const studyPlan = new StudyPlan({
         user: req.userId,
         title: `${subject} - ${duration} Study Plan`,
         subject,
         difficulty: level,
-        estimatedDuration: dailyContent.length,
-        dailyContent,
-        topics: basicTopics,
+        estimatedDuration: durationInDays,
         schedule: {
           startDate,
           endDate,
@@ -168,6 +41,57 @@ Format as valid JSON array starting with [{"day": 1, "title": "...", ...}]`;
         aiPrompt: `Subject: ${subject}, Level: ${level}, Duration: ${duration}, Style: ${learningStyle}`,
         status: 'active'
       });
+
+      // Attempt AI detailed plan generation
+      let aiResult;
+      try {
+        aiResult = await aiService.generateDetailedStudyPlan(subject, level, duration, learningStyle);
+      } catch (err) {
+        logger.error('AI detailed plan generation threw error:', err);
+        aiResult = { success: false };
+      }
+
+      // Map AI result into dailyContent
+      let planArray = [];
+      if (aiResult?.success && aiResult.content) {
+        try {
+          const raw = aiResult.content;
+          planArray = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        } catch (parseErr) {
+          logger.error('Failed to parse AI study plan JSON, falling back:', parseErr);
+        }
+      }
+
+      if (!Array.isArray(planArray) || planArray.length === 0) {
+        // Fallback structured plan from AI service
+        planArray = aiService.generateFallbackStudyPlan(subject, level, durationInDays, learningStyle);
+      }
+
+      // Build dailyContent entries
+      const dailyContent = planArray.map((dayItem) => {
+        const dayNum = dayItem.day || planArray.indexOf(dayItem) + 1;
+        const date = new Date(startDate.getTime() + (dayNum - 1) * 24 * 60 * 60 * 1000);
+        const content = dayItem.content || {
+          overview: dayItem.overview || '',
+          keyPoints: dayItem.keyPoints || [],
+          examples: dayItem.examples || [],
+          exercises: dayItem.exercises || []
+        };
+        return {
+          day: dayNum,
+          date,
+          title: dayItem.title || `Day ${dayNum}: ${subject}`,
+          objectives: dayItem.objectives || [],
+          content,
+          resources: dayItem.resources || [],
+          activities: dayItem.activities || [],
+          assessment: dayItem.assessment || [],
+          homework: dayItem.homework || '',
+          totalTime: dayItem.totalTime || 90
+        };
+      });
+
+      studyPlan.dailyContent = dailyContent;
 
       await studyPlan.save();
 
@@ -541,53 +465,50 @@ Please provide detailed educational content with overview, key points, examples,
   async createQuiz(req, res) {
     try {
       const { topic, difficulty, questionCount = 10, isPublic = true } = req.body;
+      
+      logger.info(`Creating quiz: ${topic}, ${difficulty}, ${questionCount} questions`);
 
       // Generate AI quiz questions
       const aiResponse = await aiService.generateQuizQuestions(topic, difficulty, questionCount);
 
       if (!aiResponse.success) {
-        return res.status(500).json({
-          success: false,
-          message: 'Failed to generate quiz questions'
-        });
+        logger.error('AI quiz generation failed:', aiResponse.error);
+        // Use fallback questions instead of failing
+        logger.info('Using fallback quiz questions');
       }
 
       let questions;
-      try {
-        // Try to extract JSON from the response
-        let jsonContent = aiResponse.content;
-        
-        // Look for JSON array in the response
-        const jsonMatch = jsonContent.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          jsonContent = jsonMatch[0];
-        }
-        
-        questions = JSON.parse(jsonContent);
-        
-        // Validate that it's an array of questions
-        if (!Array.isArray(questions) || questions.length === 0) {
-          throw new Error('Invalid questions format');
-        }
-        
-      } catch (parseError) {
-        logger.error('Failed to parse AI quiz response:', parseError);
-        logger.error('Raw AI response:', aiResponse.content);
-        
-        // Use fallback questions if parsing fails
-        questions = [
-          {
-            question: `What is a key concept in ${topic}?`,
-            options: [
-              "A fundamental principle",
-              "An unrelated topic",
-              "A random fact",
-              "None of the above"
-            ],
-            correct: 0,
-            explanation: `This represents a core concept in ${topic} that students should understand.`
+      
+      if (aiResponse.success) {
+        try {
+          // Try to extract JSON from the response
+          let jsonContent = aiResponse.content;
+          
+          // Look for JSON array in the response
+          const jsonMatch = jsonContent.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            jsonContent = jsonMatch[0];
           }
-        ];
+          
+          questions = JSON.parse(jsonContent);
+          
+          // Validate that it's an array of questions
+          if (!Array.isArray(questions) || questions.length === 0) {
+            throw new Error('Invalid questions format');
+          }
+          
+          logger.info(`Successfully parsed ${questions.length} questions`);
+          
+        } catch (parseError) {
+          logger.error('Failed to parse AI quiz response:', parseError);
+          questions = null;
+        }
+      }
+      
+      // Use fallback questions if AI failed or parsing failed
+      if (!questions) {
+        logger.info('Using fallback questions');
+        questions = this.generateFallbackQuestions(topic, difficulty, questionCount);
       }
 
       // Generate a unique access code for private quizzes
@@ -601,10 +522,12 @@ Please provide detailed educational content with overview, key points, examples,
         isPublic,
         accessCode,
         creator: req.userId,
-        aiGenerated: true
+        aiGenerated: aiResponse.success
       });
 
       await quiz.save();
+      
+      logger.info(`Quiz created successfully: ${quiz._id}`);
 
       res.status(201).json({
         success: true,
@@ -615,7 +538,7 @@ Please provide detailed educational content with overview, key points, examples,
       logger.error('Create quiz error:', error);
       res.status(500).json({
         success: false,
-        message: 'Internal server error'
+        message: 'Internal server error: ' + error.message
       });
     }
   }
@@ -623,6 +546,8 @@ Please provide detailed educational content with overview, key points, examples,
   async createManualQuiz(req, res) {
     try {
       const { title, topic, difficulty, questions, isPublic = true } = req.body;
+      
+      logger.info(`Creating manual quiz: ${title}`);
       
       // Validate required fields
       if (!title || !topic || !difficulty || !questions || !Array.isArray(questions)) {
@@ -632,8 +557,19 @@ Please provide detailed educational content with overview, key points, examples,
         });
       }
       
+      // Validate questions format
+      for (const question of questions) {
+        if (!question.question || !question.options || !Array.isArray(question.options) || 
+            question.correct === undefined || !question.explanation) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid question format'
+          });
+        }
+      }
+      
       // Generate a unique access code for private quizzes
-      const accessCode = !isPublic ? generateUniqueCode() : null;
+      const accessCode = !isPublic ? this.generateUniqueCode() : null;
       
       const quiz = new Quiz({
         title,
@@ -648,6 +584,8 @@ Please provide detailed educational content with overview, key points, examples,
       
       await quiz.save();
       
+      logger.info(`Manual quiz created successfully: ${quiz._id}`);
+      
       res.status(201).json({
         success: true,
         message: 'Manual quiz created successfully',
@@ -657,7 +595,7 @@ Please provide detailed educational content with overview, key points, examples,
       logger.error('Create manual quiz error:', error);
       res.status(500).json({
         success: false,
-        message: 'Internal server error'
+        message: 'Internal server error: ' + error.message
       });
     }
   }
@@ -670,6 +608,144 @@ Please provide detailed educational content with overview, key points, examples,
       code += characters.charAt(Math.floor(Math.random() * characters.length));
     }
     return code;
+  }
+  
+  // Generate fallback questions when AI fails
+  generateFallbackQuestions(topic, difficulty, count) {
+    const questions = [];
+    
+    for (let i = 1; i <= count; i++) {
+      questions.push({
+        question: `What is an important ${difficulty} level concept in ${topic}?`,
+        options: [
+          `Correct answer about ${topic} concept ${i}`,
+          `Incorrect option A for ${topic}`,
+          `Incorrect option B for ${topic}`,
+          `Incorrect option C for ${topic}`
+        ],
+        correct: 0,
+        explanation: `This is correct because it represents a fundamental ${difficulty} level concept in ${topic} that students need to master.`
+      });
+    }
+    
+    return questions;
+  }
+  
+  // Parse duration helper
+  parseDuration(duration) {
+    if (!duration) return 30;
+    
+    const durationStr = duration.toLowerCase();
+    if (durationStr.includes('month')) {
+      const months = parseInt(durationStr) || 1;
+      return months * 30;
+    } else if (durationStr.includes('week')) {
+      const weeks = parseInt(durationStr) || 1;
+      return weeks * 7;
+    } else if (durationStr.includes('day')) {
+      return parseInt(durationStr) || 30;
+    } else {
+      return parseInt(duration) || 30;
+    }
+  }
+  
+  // Create syllabus-based content
+  async createSyllabusBasedContent(syllabusText, subject, level, duration) {
+    const durationInDays = this.parseDuration(duration);
+    const topics = this.extractTopicsFromSyllabus(syllabusText, subject);
+    
+    const dailyContent = [];
+    const topicsPerDay = Math.max(1, Math.ceil(topics.length / durationInDays));
+    
+    for (let day = 1; day <= durationInDays; day++) {
+      const dayTopics = topics.slice((day - 1) * topicsPerDay, day * topicsPerDay);
+      const mainTopic = dayTopics[0] || `${subject} Concepts`;
+      
+      dailyContent.push({
+        day,
+        title: `Day ${day}: ${mainTopic}`,
+        objectives: [
+          `Understand ${mainTopic} fundamentals`,
+          `Learn key principles and concepts`,
+          `Apply knowledge through practical exercises`,
+          `Prepare for advanced topics`
+        ],
+        content: {
+          overview: `Today's session focuses on ${mainTopic}. This is a crucial topic in ${subject} that will provide you with essential knowledge and skills. You'll explore the fundamental concepts, understand practical applications, and develop hands-on experience through various exercises.`,
+          keyPoints: [
+            `Core definition and scope of ${mainTopic}`,
+            `Key principles underlying ${mainTopic}`,
+            `Common applications and use cases`,
+            `Best practices and methodologies`,
+            `Integration with other ${subject} concepts`
+          ],
+          examples: [
+            `Real-world application of ${mainTopic} in professional settings`,
+            `Step-by-step demonstration of ${mainTopic} implementation`,
+            `Case study showing successful ${mainTopic} usage`,
+            `Common scenarios where ${mainTopic} is essential`
+          ],
+          exercises: [
+            `Practice: Apply ${mainTopic} concepts to solve basic problems`,
+            `Exercise: Implement ${mainTopic} in a practical scenario`,
+            `Activity: Analyze existing ${mainTopic} implementations`,
+            `Challenge: Create your own ${mainTopic} solution`
+          ]
+        },
+        resources: [
+          {
+            type: 'article',
+            title: `${mainTopic} Comprehensive Guide`,
+            description: `In-depth coverage of ${mainTopic} concepts and applications`
+          },
+          {
+            type: 'practice',
+            title: `${mainTopic} Practice Exercises`,
+            description: `Hands-on exercises to master ${mainTopic}`
+          }
+        ],
+        totalTime: 90
+      });
+    }
+    
+    return dailyContent;
+  }
+  
+  // Extract topics from syllabus text
+  extractTopicsFromSyllabus(syllabusText, subject) {
+    const topics = [];
+    const lines = syllabusText.split('\n').filter(line => line.trim());
+    
+    // Look for numbered items, bullet points, or chapter headings
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed.match(/^\d+\./) || 
+          trimmed.match(/^[-*•]/) || 
+          trimmed.includes('Chapter') || 
+          trimmed.includes('Unit') ||
+          trimmed.includes('Module') ||
+          trimmed.includes('Topic')) {
+        const topic = trimmed.replace(/^\d+\.|\*|-|•/g, '').trim();
+        if (topic.length > 3 && topic.length < 100) {
+          topics.push(topic);
+        }
+      }
+    });
+    
+    // If no topics found, create default structure
+    if (topics.length === 0) {
+      topics.push(
+        `Introduction to ${subject}`,
+        `${subject} Fundamentals`,
+        `Core ${subject} Concepts`,
+        `Practical ${subject} Applications`,
+        `Advanced ${subject} Topics`,
+        `${subject} Best Practices`,
+        `Review and Assessment`
+      );
+    }
+    
+    return topics;
   }
   
   // Join a quiz by access code
@@ -716,13 +792,13 @@ Please provide detailed educational content with overview, key points, examples,
   async getQuizzes(req, res) {
     try {
       const { topic, difficulty } = req.query;
-      const filter = {};
+      const filter = { isPublic: true }; // Only show public quizzes by default
 
       if (topic) filter.topic = new RegExp(topic, 'i');
       if (difficulty) filter.difficulty = difficulty;
 
       const quizzes = await Quiz.find(filter)
-        .populate('createdBy', 'username')
+        .populate('creator', 'username firstName lastName')
         .sort({ createdAt: -1 });
 
       res.json({

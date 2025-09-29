@@ -357,6 +357,292 @@ class StudyGroupController {
       });
     }
   }
+  
+  // Schedule a session
+  async scheduleSession(req, res) {
+    try {
+      const { id } = req.params;
+      const { title, description, scheduledAt, duration } = req.body;
+      const userId = req.userId;
+      
+      const studyGroup = await StudyGroup.findById(id);
+      
+      if (!studyGroup) {
+        return res.status(404).json({
+          success: false,
+          message: 'Study group not found'
+        });
+      }
+      
+      // Only group creator can schedule sessions
+      if (studyGroup.creator.toString() !== userId.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only the group creator can schedule sessions'
+        });
+      }
+      
+      await studyGroup.scheduleSession({
+        title,
+        description,
+        scheduledAt,
+        duration: duration || 60
+      }, userId);
+      
+      await studyGroup.populate('creator', 'name email');
+      await studyGroup.populate('members.user', 'name email');
+      
+      res.json({
+        success: true,
+        message: 'Session scheduled successfully',
+        group: studyGroup
+      });
+    } catch (error) {
+      logger.error('Schedule session error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+  
+  // End a session (creator only)
+  async endSession(req, res) {
+    try {
+      const { id, sessionId } = req.params;
+      const userId = req.userId;
+      
+      const studyGroup = await StudyGroup.findById(id);
+      if (!studyGroup) {
+        return res.status(404).json({ success: false, message: 'Study group not found' });
+      }
+      
+      // Only group creator can end sessions
+      if (studyGroup.creator.toString() !== userId.toString()) {
+        return res.status(403).json({ success: false, message: 'Only the group creator can end sessions' });
+      }
+      
+      await studyGroup.endSession(sessionId, userId);
+      const session = studyGroup.sessions.id(sessionId);
+      
+      // Notify participants via Socket.IO
+      req.io.to(`study-session-${sessionId}`).emit('session-ended', { groupId: id, sessionId });
+      req.io.to(`study-group-${id}`).emit('session-status-update', { sessionId, status: 'completed' });
+      
+      res.json({ success: true, message: 'Session ended', session });
+    } catch (error) {
+      logger.error('End session error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  }
+
+  // Join a session by code
+  async joinSessionByCode(req, res) {
+    try {
+      const { code } = req.body;
+      const userId = req.userId;
+      
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ success: false, message: 'Join code is required' });
+      }
+      
+      const studyGroup = await StudyGroup.findOne({ 'sessions.joinCode': code });
+      if (!studyGroup) {
+        return res.status(404).json({ success: false, message: 'Session with this code not found' });
+      }
+      
+      const session = (studyGroup.sessions || []).find(s => s.joinCode === code);
+      if (!session) {
+        return res.status(404).json({ success: false, message: 'Session not found' });
+      }
+      
+      // Allow anyone to join via code if the session is live or it is time
+      await studyGroup.joinSession(session._id, userId);
+      
+      res.json({
+        success: true,
+        groupId: studyGroup._id,
+        sessionId: session._id,
+        meetingLink: session.meetingLink,
+        session
+      });
+    } catch (error) {
+      logger.error('Join session by code error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  }
+
+  // Get a session details
+  async getSession(req, res) {
+    try {
+      const { id, sessionId } = req.params;
+      const studyGroup = await StudyGroup.findById(id);
+      if (!studyGroup) {
+        return res.status(404).json({ success: false, message: 'Study group not found' });
+      }
+      const session = studyGroup.sessions.id(sessionId);
+      if (!session) {
+        return res.status(404).json({ success: false, message: 'Session not found' });
+      }
+      res.json({
+        success: true,
+        session: {
+          id: session._id,
+          title: session.title,
+          scheduledAt: session.scheduledAt,
+          duration: session.duration,
+          meetingLink: session.meetingLink,
+          joinCode: session.joinCode,
+          status: session.status,
+          createdBy: session.createdBy,
+          liveStartedAt: session.liveStartedAt,
+          endedAt: session.endedAt
+        }
+      });
+    } catch (error) {
+      logger.error('Get session error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  }
+  
+  // Join a session
+  async joinSession(req, res) {
+    try {
+      const { id, sessionId } = req.params;
+      const userId = req.userId;
+      
+      const studyGroup = await StudyGroup.findById(id);
+      
+      if (!studyGroup) {
+        return res.status(404).json({
+          success: false,
+          message: 'Study group not found'
+        });
+      }
+      
+      // Check if user is a member
+      if (!studyGroup.isMember(userId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'You must be a member to join sessions'
+        });
+      }
+      
+      await studyGroup.joinSession(sessionId, userId);
+      
+      const session = studyGroup.sessions.id(sessionId);
+      
+      res.json({
+        success: true,
+        message: 'Joined session successfully',
+        meetingLink: session.meetingLink,
+        session
+      });
+    } catch (error) {
+      logger.error('Join session error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+  
+  // Send chat message
+  async sendChatMessage(req, res) {
+    try {
+      const { id } = req.params;
+      const { content, type = 'text' } = req.body;
+      const userId = req.userId;
+      
+      const studyGroup = await StudyGroup.findById(id);
+      
+      if (!studyGroup) {
+        return res.status(404).json({
+          success: false,
+          message: 'Study group not found'
+        });
+      }
+      
+      // Check if user is a member
+      if (!studyGroup.isMember(userId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'You must be a member to send messages'
+        });
+      }
+      
+      await studyGroup.addChatMessage(userId, content, type);
+      
+      // Get the latest message with user info
+      await studyGroup.populate('chat.messages.user', 'firstName lastName username');
+      const latestMessage = studyGroup.chat.messages[studyGroup.chat.messages.length - 1];
+      
+      // Emit to all group members via Socket.IO
+      req.io.to(`study-group-${id}`).emit('new-message', {
+        groupId: id,
+        message: latestMessage
+      });
+      
+      res.json({
+        success: true,
+        message: latestMessage
+      });
+    } catch (error) {
+      logger.error('Send chat message error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+  
+  // Get chat messages
+  async getChatMessages(req, res) {
+    try {
+      const { id } = req.params;
+      const { limit = 50, before } = req.query;
+      const userId = req.userId;
+      
+      const studyGroup = await StudyGroup.findById(id)
+        .populate('chat.messages.user', 'firstName lastName username');
+      
+      if (!studyGroup) {
+        return res.status(404).json({
+          success: false,
+          message: 'Study group not found'
+        });
+      }
+      
+      // Check if user is a member
+      if (!studyGroup.isMember(userId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'You must be a member to view messages'
+        });
+      }
+      
+      let messages = studyGroup.chat.messages;
+      
+      // Filter messages before a certain date if specified
+      if (before) {
+        messages = messages.filter(msg => msg.createdAt < new Date(before));
+      }
+      
+      // Get latest messages
+      messages = messages.slice(-limit);
+      
+      res.json({
+        success: true,
+        messages
+      });
+    } catch (error) {
+      logger.error('Get chat messages error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
 }
 
 export default new StudyGroupController();
